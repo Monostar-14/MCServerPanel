@@ -32,7 +32,6 @@ dotnet run
 MCServerPanel.exe
 ```
 
-Windows 用户也可以直接用 Visual Studio 打开 `MCServerPanel.slnx` 按 F5。
 
 ### 2. 首次初始化（必须）
 
@@ -40,7 +39,6 @@ Windows 用户也可以直接用 Visual Studio 打开 `MCServerPanel.slnx` 按 F
 
 ```
   ⚠ 还没有管理员密码。请打开 /setup.html，用下面的一次性令牌初始化：
-    初始化令牌：X-2kYCefdn4s0JOPeA0Gjt1I1lbEXTUq
 ```
 
 浏览器打开 `http://localhost:8989/setup.html`，填入令牌 + 用户名 + 密码（≥10 位）。
