@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="MCServerPanel/MCServerPanel.csproj" />
+  <Project Path="MCServerPanel.Tests/MCServerPanel.Tests.csproj" />
+</Solution>

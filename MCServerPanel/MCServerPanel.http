@@ -1,0 +1,44 @@
+@MCServerPanel_HostAddress = http://localhost:8989
+
+### 健康检查（实际端口 / 局域网地址）
+GET {{MCServerPanel_HostAddress}}/api/health
+Accept: application/json
+
+### 读取设置
+GET {{MCServerPanel_HostAddress}}/api/settings
+
+### 设置服务端目录 + 端口
+POST {{MCServerPanel_HostAddress}}/api/settings
+Content-Type: application/json
+
+{
+  "serverPath": "D:\\Server 1.21.11",
+  "port": 8989,
+  "allowLan": true
+}
+
+### 目录浏览（不带 path 时返回盘符）
+GET {{MCServerPanel_HostAddress}}/api/browse?path=D:\Server 1.21.11
+
+### 插件与配置文件清单
+GET {{MCServerPanel_HostAddress}}/api/catalog
+
+### 读取一个配置文件
+GET {{MCServerPanel_HostAddress}}/api/config?file=SnowyGems/config.yml
+
+### 改值保存（expectedRaw 取自 /api/config 返回的 raw，用于检测外部改动）
+POST {{MCServerPanel_HostAddress}}/api/config/save
+Content-Type: application/json
+
+{
+  "file": "SnowyGems/config.yml",
+  "baseHash": "<从 /api/config 拿到的 hash>",
+  "edits": [
+    {
+      "path": ["Debug"],
+      "type": "bool",
+      "value": true,
+      "expectedRaw": "false"
+    }
+  ]
+}

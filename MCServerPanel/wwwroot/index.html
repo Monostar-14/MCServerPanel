@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MCServerPanel · 插件配置面板</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">MC</div>
+      <div class="brand-text">
+        <div class="brand-title">MCServerPanel</div>
+        <div class="brand-sub">插件配置可视化</div>
+      </div>
+    </div>
+
+    <button class="server-chip" id="serverChip" title="点击修改服务端地址">
+      <span class="dot" id="serverDot"></span>
+      <span class="server-name" id="serverPathLabel">尚未设置服务端</span>
+    </button>
+
+    <div class="search-box">
+      <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M10 18a8 8 0 1 1 4.9-1.7l4.4 4.4-1.4 1.4-4.4-4.4A7.9 7.9 0 0 1 10 18Zm0-2a6 6 0 1 0 0-12 6 6 0 0 0 0 12Z"/></svg>
+      <input id="searchInput" type="search" placeholder="搜索插件或文件…" autocomplete="off">
+    </div>
+
+    <div class="plugin-list" id="pluginList">
+      <div class="placeholder">正在加载…</div>
+    </div>
+
+    <div class="sidebar-foot">
+      <button class="ghost-btn" id="btnSettings">设置</button>
+      <button class="ghost-btn" id="btnRefresh">刷新列表</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="crumbs" id="crumbs"><span class="muted">从左侧选择一个配置文件</span></div>
+      <div class="top-actions">
+        <button class="ghost-btn" id="btnRaw" disabled>查看源码</button>
+        <button class="ghost-btn" id="btnReload" disabled>重新加载</button>
+      </div>
+    </header>
+
+    <div class="content" id="content">
+      <div class="welcome">
+        <div class="welcome-inner">
+          <h1>让插件配置一眼看懂</h1>
+          <p>选择左侧任意 <code>.yml</code> 文件：布尔值渲染成滑块，数字是带步进的输入框，字符串是文本框，多行文本是文本域。</p>
+          <p class="welcome-note">保存时只替换你改过的那一个值，<strong>注释、空行、缩进、键顺序全部保持原样</strong>。</p>
+          <div id="bootError" class="boot-error" hidden></div>
+        </div>
+      </div>
+    </div>
+
+    <footer class="savebar" id="savebar">
+      <div class="save-info">
+        <span class="pending-dot" id="pendingDot"></span>
+        <span id="changeCount">没有待保存的改动</span>
+      </div>
+      <div class="save-actions">
+        <button class="ghost-btn" id="btnDiscard" disabled>放弃改动</button>
+        <button class="primary-btn" id="btnSave" disabled>保存到文件 <kbd>Ctrl</kbd><kbd>S</kbd></button>
+      </div>
+    </footer>
+  </main>
+</div>
+
+<div id="modalRoot"></div>
+<div id="toastRoot" class="toast-root"></div>
+<script src="js/app.js"></script>
+</body>
+</html>

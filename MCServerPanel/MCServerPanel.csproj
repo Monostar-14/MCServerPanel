@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>MCServerPanel</RootNamespace>
+    <AssemblyName>MCServerPanel</AssemblyName>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <UserSecretsId>mcserverpanel-2026</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="YamlDotNet" Version="18.1.0" />
+  </ItemGroup>
+
+</Project>
