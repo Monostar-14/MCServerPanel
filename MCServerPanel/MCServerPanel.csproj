@@ -14,4 +14,16 @@
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
 
+  <!-- 直接从 bin 下运行 exe 时也要能加载前端静态文件。
+       用 Build 后置目标复制，而不是 Content 项的 CopyToOutputDirectory，
+       否则 publish 时会产生重复的发布项（MSB3094）。 -->
+  <Target Name="CopyWwwRootToOutput" AfterTargets="Build">
+    <ItemGroup>
+      <WwwRootFiles Include="$(MSBuildProjectDirectory)\wwwroot\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(WwwRootFiles)"
+          DestinationFiles="@(WwwRootFiles->'$(OutDir)wwwroot\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
+
 </Project>

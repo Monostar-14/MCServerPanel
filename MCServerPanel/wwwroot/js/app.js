@@ -13,8 +13,60 @@
     search: '',
     uid: 0,
     rows: new Map(),      // uid -> row element
-    bus: false
+    bus: false,
+    user: '',
+    // 主题 / 侧栏
+    theme: 'dark',
+    sidebarCollapsed: false,
+    // 协作
+    clientId: '',
+    clientName: '',
+    locks: new Map(),     // 相对路径 -> LockDto
+    lockBusy: false,
+    lockHolder: null,
+    external: null,       // 磁盘被外部改动时记录 { hash, size, lastWrite }
+    watchTimer: null
   };
+
+  const LS = {
+    theme: 'mcpanel-theme',
+    sidebar: 'mcpanel-sidebar',
+    client: 'mcpanel-client-id',
+    name: 'mcpanel-client-name'
+  };
+
+  function initIdentity() {
+    let id = localStorage.getItem(LS.client);
+    if (!id) {
+      id = 'c-' + Math.random().toString(36).slice(2, 10);
+      localStorage.setItem(LS.client, id);
+    }
+    state.clientId = id;
+    state.clientName = localStorage.getItem(LS.name) || ('用户-' + id.slice(-4).toUpperCase());
+  }
+
+  function applyTheme(theme, persist = true) {
+    state.theme = theme === 'light' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = state.theme;
+    const icon = $('#themeIcon');
+    if (icon) icon.textContent = state.theme === 'dark' ? '☀' : '☾';
+    const btn = $('#btnTheme');
+    if (btn) btn.title = state.theme === 'dark' ? '切换到亮色主题（Ctrl+Shift+L）' : '切换到暗色主题（Ctrl+Shift+L）';
+    if (persist) localStorage.setItem(LS.theme, state.theme);
+  }
+
+  function toggleTheme() {
+    applyTheme(state.theme === 'dark' ? 'light' : 'dark');
+  }
+
+  function applySidebar(collapsed, persist = true) {
+    state.sidebarCollapsed = !!collapsed;
+    document.documentElement.classList.toggle('sidebar-collapsed', state.sidebarCollapsed);
+    document.documentElement.classList.remove('sidebar-collapsed-init');
+    const btn = $('#btnSidebar');
+    if (btn) btn.title = state.sidebarCollapsed ? '展开插件列表（Ctrl+B）' : '折叠插件列表（Ctrl+B）';
+    if (persist) localStorage.setItem(LS.sidebar, state.sidebarCollapsed ? 'collapsed' : 'open');
+  }
 
   function h(tag, props, ...kids) {
     const node = document.createElement(tag);
@@ -54,9 +106,14 @@
 
   /* ============================ 网络 ============================ */
   async function api(path, opts = {}) {
-    const init = { ...opts, headers: { ...(opts.headers || {}) } };
+    const init = { ...opts, headers: { ...(opts.headers || {}), 'X-MCSP-CSRF': '1' } };
     if (init.body) init.headers['Content-Type'] = 'application/json';
     const res = await fetch(path, init);
+    if (res.status === 401) {
+      const next = encodeURIComponent(location.pathname + location.hash);
+      location.href = '/login.html?next=' + next;
+      throw new Error('未登录或会话已过期');
+    }
     const text = await res.text();
     let data = null;
     try { data = text ? JSON.parse(text) : null; } catch { data = { error: text }; }
@@ -157,7 +214,13 @@
 
   function openSettings() {
     const s = state.settings || {};
-    const pathInput = h('input', { class: 'text-input', type: 'text', value: s.serverPath || '', placeholder: '例如 D:\\Server 1.21.11' });
+    const rootLocked = !!s.pluginsRootLocked;
+    const pathInput = h('input', {
+      class: 'text-input', type: 'text', value: s.serverPath || '',
+      placeholder: '例如 D:\\Server 1.21.11',
+      readonly: rootLocked ? true : null,
+      title: rootLocked ? '插件根由启动参数/环境变量固定' : null
+    });
     const portInput = h('input', { class: 'text-input', type: 'number', min: '1', max: '65535', value: String(s.port || 8989), style: { width: '140px', flex: '0 0 auto' } });
     const lanSwitch = h('button', { class: 'switch', role: 'switch', 'aria-checked': String(!!s.allowLan), title: '允许局域网访问' },
       h('span', { class: 'knob' }));
@@ -170,6 +233,11 @@
 
     const urlsBox = h('div', { class: 'urls' }, ...(s.urls || []).map(u =>
       h('div', { class: 'url-line' }, u, h('button', { class: 'copy-btn', onclick: () => copyText(u) }, '复制'))));
+
+    const nameInput = h('input', {
+      class: 'text-input', type: 'text', maxlength: '24', value: state.clientName,
+      placeholder: '例如 小王 / 服主'
+    });
 
     const statusBox = h('div', {});
     if (s.error) statusBox.append(h('div', { class: 'banner warn' }, h('div', {}, h('div', { class: 'b-title' }, '还没找到插件目录'), s.error)));
@@ -209,6 +277,11 @@
             allowLan: lanSwitch.getAttribute('aria-checked') === 'true'
           })
         });
+        const newName = nameInput.value.trim();
+        if (newName) {
+          state.clientName = newName;
+          localStorage.setItem(LS.name, newName);
+        }
         updateServerChip();
         await loadCatalog();
         toast('ok', '设置已保存', state.settings.pluginsPath
@@ -230,6 +303,10 @@
       const picked = await browseDialog(pathInput.value.trim());
       if (picked) pathInput.value = picked;
     } }, '浏览…');
+    if (rootLocked) {
+      browsed.disabled = true;
+      browsed.style.display = 'none';
+    }
 
     dlg = modal({
       title: '设置',
@@ -239,7 +316,9 @@
         h('div', { class: 'field' },
           h('label', {}, 'Minecraft 服务端目录'),
           h('div', { class: 'field-row' }, pathInput, browsed),
-          h('div', { class: 'hint' }, '选择服务端根目录（含 server.properties 与 plugins 的那一层），也可以直接选 plugins 目录。程序会扫描其中的 .yml / .yaml。')
+          h('div', { class: 'hint' }, rootLocked
+            ? '插件根目录由启动参数 / 环境变量固定，网页中不能修改（这是防止越权访问其他目录的安全设计）。'
+            : '选择服务端根目录（含 server.properties 与 plugins 的那一层），也可以直接选 plugins 目录。程序会扫描其中的 .yml / .yaml。')
         ),
         h('div', { class: 'flex-2' },
           h('div', { class: 'field' },
@@ -254,12 +333,63 @@
           )
         ),
         h('div', { class: 'field' },
+          h('label', {}, '你的显示名称（协作提示用）'),
+          nameInput,
+          h('div', { class: 'hint' }, '同事打开同一份文件时，会在顶部看到「谁正在编辑」；只保存在本机浏览器里。')
+        ),
+        h('div', { class: 'field' },
           h('label', {}, '当前访问地址'),
           urlsBox,
-          h('div', { class: 'hint' }, `配置里的端口 ${s.port || 8989}，实际监听 ${s.actualPort || '—'}。本面板没有登录验证，请只在可信网络中使用。`)
+          h('div', { class: 'hint' }, `配置里的端口 ${s.port || 8989}，实际监听 ${s.actualPort || '—'}。面板已启用密码登录；开放局域网/公网前请确认使用强密码，并只监听可信网络。`)
         )
       ],
-      footer: [h('div', { class: 'spacer' }), restartBtn, saveBtn]
+      footer: [
+        h('div', { class: 'spacer' }),
+        h('button', { class: 'ghost-btn', onclick: openChangePassword }, '修改密码'),
+        restartBtn,
+        saveBtn
+      ]
+    });
+  }
+
+  function openChangePassword() {
+    const cur = h('input', { class: 'text-input', type: 'password', autocomplete: 'current-password' });
+    const nw = h('input', { class: 'text-input', type: 'password', autocomplete: 'new-password' });
+    const nw2 = h('input', { class: 'text-input', type: 'password', autocomplete: 'new-password' });
+    const err = h('div', { class: 'field-error', hidden: true });
+    const submit = h('button', { class: 'primary-btn' }, '修改密码');
+
+    const dlg = modal({
+      title: '修改管理员密码',
+      sub: '修改后所有已登录会话都会失效，需要重新登录',
+      body: [
+        err,
+        h('div', { class: 'field' }, h('label', {}, '当前密码'), cur),
+        h('div', { class: 'field' }, h('label', {}, '新密码（至少 10 位）'), nw),
+        h('div', { class: 'field' }, h('label', {}, '再输一次新密码'), nw2)
+      ],
+      footer: [h('div', { class: 'spacer' }), h('button', { class: 'ghost-btn', onclick: () => dlg.close() }, '取消'), submit]
+    });
+
+    submit.addEventListener('click', async () => {
+      err.hidden = true;
+      if (nw.value.length < 10) { err.hidden = false; err.textContent = '新密码至少 10 位。'; return; }
+      if (nw.value !== nw2.value) { err.hidden = false; err.textContent = '两次输入的新密码不一致。'; return; }
+      submit.disabled = true;
+      try {
+        await api('/api/auth/change-password', {
+          method: 'POST',
+          body: JSON.stringify({ currentPassword: cur.value, newPassword: nw.value })
+        });
+        dlg.close();
+        toast('ok', '密码已修改', '请用新密码重新登录。');
+        setTimeout(() => { location.href = '/login.html'; }, 900);
+      } catch (e) {
+        err.hidden = false;
+        err.textContent = e.message;
+      } finally {
+        submit.disabled = false;
+      }
     });
   }
 
@@ -376,16 +506,28 @@
       for (const f of files) {
         const active = state.doc?.file === f.relativePath;
         const dirty = active && state.pending.size > 0;
+        const lock = state.locks?.get(f.relativePath);
         const relParts = f.relativePath.split('/');
         const label = relParts.length > 1 ? relParts.slice(1).join('/') : f.name;
+
+        const badges = h('span', { class: 'file-badges' });
+        if (lock && !lock.mine) {
+          badges.append(h('span', {
+            class: 'lock-dot',
+            title: `${lock.clientName} 正在编辑（${lock.ageSeconds} 秒前还有操作）`
+          }));
+        }
+        if (dirty) badges.append(h('span', { class: 'dirty', title: '有未保存的改动' }));
+
         group.append(h('button', {
           class: 'file-btn' + (active ? ' active' : ''),
-          title: `${f.relativePath}\n${fmtBytes(f.size)} · 修改于 ${fmtTime(f.lastWrite)}`,
+          title: `${f.relativePath}\n${fmtBytes(f.size)} · 修改于 ${fmtTime(f.lastWrite)}`
+            + (lock && !lock.mine ? `\n${lock.clientName} 正在编辑` : ''),
           onclick: () => openFile(f.relativePath)
         },
           h('span', { class: 'fname' }, label),
           f.isMain ? h('span', { class: 'main-tag' }, '主配置') : null,
-          dirty ? h('span', { class: 'dirty', title: '有未保存的改动' }) : null
+          badges.childNodes.length ? badges : null
         ));
       }
       list.append(group);
@@ -394,6 +536,135 @@
     if (!shown) {
       list.append(h('div', { class: 'placeholder' },
         q ? '没有匹配的插件或文件。' : '这个 plugins 目录里没有找到 .yml 文件。'));
+    }
+  }
+
+  /* ============================ 多人与哈希检测 ============================ */
+  async function claimFile(file, takeover = false) {
+    if (!file) return null;
+    try {
+      const res = await api('/api/config/claim', {
+        method: 'POST',
+        body: JSON.stringify({ file, clientId: state.clientId, clientName: state.clientName, takeover })
+      });
+      state.lockBusy = !res.ok;
+      state.lockHolder = res.holder || null;
+      return res;
+    } catch {
+      return null; // 协作检测不可用时不影响本地编辑
+    }
+  }
+
+  function releaseFile() {
+    try {
+      fetch('/api/config/release', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: state.clientId }),
+        keepalive: true
+      });
+    } catch { /* ignore */ }
+  }
+
+  function startWatch() {
+    stopWatch();
+    const interval = new URLSearchParams(location.search).has('selftest') ? 1500 : 5000;
+    state.watchTimer = setInterval(pollWatch, interval);
+    setTimeout(pollWatch, 400);
+  }
+
+  function stopWatch() {
+    if (state.watchTimer) clearInterval(state.watchTimer);
+    state.watchTimer = null;
+  }
+
+  async function pollWatch() {
+    if (!state.doc || document.hidden) return;
+    try {
+      const qs = new URLSearchParams({
+        file: state.doc.file,
+        clientId: state.clientId,
+        clientName: state.clientName,
+        since: state.doc.hash
+      });
+      const w = await api('/api/config/watch?' + qs.toString());
+
+      state.locks = new Map((w.locks || []).map((l) => [l.file, l]));
+      const holderChanged = (w.holder?.clientId || null) !== (state.lockHolder?.clientId || null);
+      state.lockBusy = !!w.lockBusy;
+      state.lockHolder = w.holder || null;
+
+      if (w.changed) {
+        state.external = { hash: w.hash, size: w.size, lastWrite: w.lastWrite };
+      } else if (state.external) {
+        state.external = null; // 重新加载后磁盘与当前一致，横幅撤掉
+      }
+
+      renderAlertBar();
+      if (holderChanged) renderSidebar();
+      updateSaveBar();
+    } catch { /* 轮询失败静默，不打断编辑 */ }
+  }
+
+  async function takeOver() {
+    if (!state.doc) return;
+    const res = await claimFile(state.doc.file, true);
+    if (res?.ok) {
+      renderAlertBar();
+      updateSaveBar();
+      toast('ok', '已接管编辑', res.previous ? `「${res.previous.clientName}」的编辑权已转给你，对方保存会被拦截。` : '');
+    } else {
+      toast('err', '接管失败', res?.holder ? `「${res.holder.clientName}」仍占用这个文件。` : '服务端没有响应。');
+    }
+  }
+
+  function renderAlertBar() {
+    const bar = $('#alertBar');
+    if (!bar) return;
+    bar.textContent = '';
+    bar.className = 'alert-bar';
+
+    const rows = [];
+    if (state.external) {
+      rows.push({
+        kind: 'warn',
+        text: h('div', {},
+          h('b', {}, '文件已在磁盘上被改动'),
+          `（当前磁盘哈希 ${String(state.external.hash || '').slice(0, 8)}，与你打开时不同）。`,
+          '可能是其他同事或工具直接改了它 —— 继续保存会覆盖对方的改动。'),
+        actions: [
+          { label: '重新加载（丢弃我的改动）', cls: 'ghost-btn', fn: () => openFile(state.doc.file, { force: true }) },
+          { label: '强制覆盖保存', cls: 'danger-btn', fn: () => save(true) }
+        ]
+      });
+    }
+    if (state.lockBusy && state.lockHolder) {
+      const hd = state.lockHolder;
+      rows.push({
+        kind: 'info',
+        text: h('div', {},
+          h('b', {}, `「${hd.clientName}」正在编辑这个文件`),
+          `（${hd.ageSeconds} 秒前还有操作）。为避免互相覆盖，你的保存已暂停。`),
+        actions: [
+          { label: '接管编辑', cls: 'ghost-btn', fn: takeOver },
+          { label: '放弃并重新加载', cls: 'ghost-btn', fn: () => openFile(state.doc.file, { force: true }) }
+        ]
+      });
+    }
+
+    if (!rows.length) {
+      bar.hidden = true;
+      return;
+    }
+    bar.hidden = false;
+    bar.className = 'alert-bar ' + (rows.some((r) => r.kind === 'warn') ? 'error' : 'info');
+    for (const row of rows) {
+      bar.append(
+        h('span', { class: 'a-icon' }, row.kind === 'warn' ? '⚠' : '◉'),
+        h('span', { class: 'a-text' }, row.text),
+        h('span', { class: 'a-actions' }, ...row.actions.map((a) =>
+          h('button', { class: a.cls, onclick: a.fn }, a.label)))
+      );
     }
   }
 
@@ -410,14 +681,22 @@
     }
     setContentLoading();
     try {
+      if (state.doc?.file && state.doc.file !== relPath) releaseFile();
       const data = await api('/api/config?file=' + encodeURIComponent(relPath));
       state.doc = data;
       state.pending.clear();
       state.collapsed.clear();
       state.rows.clear();
+      state.external = null;
+      state.lockBusy = false;
+      state.lockHolder = null;
       location.hash = '#/f/' + encodeURIComponent(relPath);
       renderSidebar();
       renderDoc();
+      updateSaveBar();
+      await claimFile(data.file);
+      startWatch();
+      renderAlertBar();
       updateSaveBar();
     } catch (e) {
       toast('err', '打不开这个文件', e.message);
@@ -654,6 +933,10 @@
       const node = findNode(key);
       if (node) {
         input.value = node.type === 'null' ? '' : (node.value ?? '');
+        if (input.tagName === 'TEXTAREA') {
+          input.style.height = 'auto';
+          input.style.height = Math.min(Math.max(input.scrollHeight + 2, 34), 460) + 'px';
+        }
       }
     }
     const sw = row.querySelector('.switch');
@@ -750,23 +1033,63 @@
       ta.value = value ?? '';
       const autosize = () => {
         ta.style.height = 'auto';
-        ta.style.height = Math.min(Math.max(ta.scrollHeight + 2, 92), 420) + 'px';
+        ta.style.height = Math.min(Math.max(ta.scrollHeight + 2, 92), 460) + 'px';
       };
       ta.addEventListener('input', () => setPending(node, ta.value, 'block'));
       requestAnimationFrame(autosize);
-      return ta;
+      return h('div', { class: 'text-wrap' }, ta);
     }
 
-    // 字符串 / 空值
+    // 字符串 / 空值：短值单行输入；长句用可换行文本域，避免只看到半截
+    const text = value ?? '';
+    const placeholder = node.type === 'null' ? '（空值，输入内容即可赋值）' : '';
+    const swatch = colorSwatch(node.type === 'string' ? text : '');
+
+    if (textUnits(text) > 52) {
+      const ta = h('textarea', {
+        class: 'text-area compact', rows: '2', spellcheck: 'false', title: text, placeholder
+      });
+      ta.value = text;
+      const autosize = () => {
+        ta.style.height = 'auto';
+        ta.style.height = Math.min(Math.max(ta.scrollHeight + 2, 34), 200) + 'px';
+      };
+      ta.addEventListener('input', () => {
+        setPending(node, ta.value, 'string');
+        autosize();
+      });
+      ta.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ta.blur(); }
+      });
+      requestAnimationFrame(autosize);
+      const wrapLong = h('div', { class: 'text-wrap' }, ta);
+      if (swatch) wrapLong.prepend(swatch);
+      return wrapLong;
+    }
+
     const input = h('input', {
       class: 'text-input', type: 'text', spellcheck: 'false',
-      value: value ?? '', placeholder: node.type === 'null' ? '（空值，输入内容即可赋值）' : ''
+      value: text, title: text, placeholder
     });
     input.addEventListener('input', () => setPending(node, input.value, 'string'));
-    const wrap = h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0' } }, input);
-    const swatch = colorSwatch(node.type === 'string' ? (value ?? '') : '');
+    const wrap = h('div', { class: 'text-wrap' }, input);
     if (swatch) wrap.prepend(swatch);
     return wrap;
+  }
+
+  // 估算字符串在等宽字体下的显示宽度（ASCII=1，CJK/全角/emoji=2）
+  function textUnits(s) {
+    let w = 0;
+    for (const ch of String(s || '')) {
+      const c = ch.codePointAt(0);
+      const wide = (c >= 0x1100 && (
+        c <= 0x115f || (c >= 0x2e80 && c <= 0xa4cf) || (c >= 0xac00 && c <= 0xd7a3) ||
+        (c >= 0xf900 && c <= 0xfaff) || (c >= 0xfe30 && c <= 0xfe6f) ||
+        (c >= 0xff00 && c <= 0xff60) || (c >= 0xffe0 && c <= 0xffe6) ||
+        (c >= 0x1f300 && c <= 0x1faff)));
+      w += wide ? 2 : 1;
+    }
+    return w;
   }
 
   const MC_COLORS = {
@@ -822,13 +1145,25 @@
     const n = state.pending.size;
     $('#changeCount').textContent = n ? `${n} 项待保存` : '没有待保存的改动';
     $('#pendingDot').classList.toggle('on', n > 0);
-    $('#btnSave').disabled = !n || state.bus;
+    const blocked = state.lockBusy || !!state.external;
+    const btn = $('#btnSave');
+    btn.disabled = !n || state.bus || blocked;
+    btn.title = blocked
+      ? (state.external ? '磁盘上的文件已被改动，请先处理顶部提示' : '其他人正在编辑这个文件，请先接管')
+      : '保存到文件（Ctrl+S）';
     $('#btnDiscard').disabled = !n;
   }
 
   /* ============================ 保存 ============================ */
-  async function save() {
+  async function save(force = false) {
+    force = force === true; // 防止把事件对象当成 force 传进来
     if (!state.doc || !state.pending.size || state.bus) return;
+    if (!force && (state.lockBusy || state.external)) {
+      toast('warn', '保存已暂停', state.external
+        ? '磁盘上的文件已被改动。请先在顶部横幅里选择「重新加载」或「强制覆盖」。'
+        : `「${state.lockHolder?.clientName || '其他人'}」正在编辑这个文件，请先接管编辑。`);
+      return;
+    }
     const edits = [...state.pending.values()].map(p => ({
       path: p.path, type: p.type, value: p.value, expectedRaw: p.raw
     }));
@@ -840,13 +1175,24 @@
     try {
       const res = await api('/api/config/save', {
         method: 'POST',
-        body: JSON.stringify({ file: state.doc.file, baseHash: state.doc.hash, edits })
+        body: JSON.stringify({
+          file: state.doc.file,
+          baseHash: state.doc.hash,
+          force,
+          clientId: state.clientId,
+          edits
+        })
       });
       state.doc = res.config;
       state.pending.clear();
+      state.external = null;
+      state.lockBusy = false;
+      state.lockHolder = null;
       renderDoc();
       renderSidebar();
+      renderAlertBar();
       updateSaveBar();
+      await claimFile(state.doc.file);
       toast('ok', `已保存 ${res.applied.length} 项改动`,
         (res.warnings || []).join('\n') || '注释、缩进与键顺序都保持原样，插件可直接读取。');
     } catch (e) {
@@ -854,6 +1200,10 @@
         const choice = await conflictDialog(e.message);
         if (choice === 'reload') await openFile(state.doc.file, { force: true });
         else if (choice === 'force') await saveForced(edits);
+      } else if (e.status === 423) {
+        state.lockBusy = true;
+        renderAlertBar();
+        toast('err', '保存被拦截', e.message);
       } else {
         toast('err', '保存失败', e.message);
       }
@@ -868,11 +1218,18 @@
     try {
       const res = await api('/api/config/save', {
         method: 'POST',
-        body: JSON.stringify({ file: state.doc.file, baseHash: state.doc.hash, force: true, edits })
+        body: JSON.stringify({
+          file: state.doc.file, baseHash: state.doc.hash, force: true,
+          clientId: state.clientId, edits
+        })
       });
       state.doc = res.config;
       state.pending.clear();
-      renderDoc(); renderSidebar(); updateSaveBar();
+      state.external = null;
+      state.lockBusy = false;
+      state.lockHolder = null;
+      renderDoc(); renderSidebar(); renderAlertBar(); updateSaveBar();
+      await claimFile(state.doc.file);
       toast('ok', '已强制覆盖并保存', `共 ${res.applied.length} 项；旧文件已备份到本机备份目录。`);
     } catch (err) {
       toast('err', '覆盖保存失败', err.message);
@@ -919,6 +1276,22 @@
   function bindGlobal() {
     $('#btnSettings').addEventListener('click', openSettings);
     $('#serverChip').addEventListener('click', openSettings);
+    $('#btnTheme').addEventListener('click', toggleTheme);
+    $('#btnSidebar').addEventListener('click', () => applySidebar(!state.sidebarCollapsed));
+    $('#btnCollapse').addEventListener('click', () => applySidebar(true));
+    $('#btnLogout').addEventListener('click', async () => {
+      if (state.pending.size) {
+        const ok = await confirmDialog({
+          title: '退出登录？',
+          message: '还有未保存的改动，退出后会丢失。',
+          confirmText: '仍然退出',
+          danger: true
+        });
+        if (!ok) return;
+      }
+      try { await api('/api/auth/logout', { method: 'POST' }); } catch { /* 会话可能已过期 */ }
+      location.href = '/login.html';
+    });
     $('#btnRefresh').addEventListener('click', async () => {
       try {
         await loadSettings();
@@ -926,7 +1299,7 @@
         if (state.doc) await openFile(state.doc.file, { force: true });
       } catch (e) { toast('err', '刷新失败', e.message); }
     });
-    $('#btnSave').addEventListener('click', save);
+    $('#btnSave').addEventListener('click', () => save());
     $('#btnDiscard').addEventListener('click', async () => {
       if (!state.pending.size) return;
       const ok = await confirmDialog({
@@ -963,8 +1336,17 @@
         e.preventDefault();
         save();
       }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        applySidebar(!state.sidebarCollapsed);
+      }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'l') {
+        e.preventDefault();
+        toggleTheme();
+      }
     });
     window.addEventListener('beforeunload', (e) => {
+      releaseFile();
       if (state.pending.size) { e.preventDefault(); e.returnValue = ''; }
     });
     window.addEventListener('hashchange', () => {
@@ -993,11 +1375,32 @@
   window.addEventListener('unhandledrejection', (e) => showBootError(e.reason?.stack || String(e.reason)));
 
   // 调试/自检入口（也方便在控制台里排查）
-  window.__mcpanel = { state, api, save, openFile, renderDoc, toast };
+  window.__mcpanel = { state, api, save, openFile, renderDoc, renderAlertBar, pollWatch, toast, applyTheme, applySidebar, updateSaveBar };
 
   (async function boot() {
+    initIdentity();
+    applyTheme(document.documentElement.dataset.theme || 'dark', false);
+    const forcedTheme = new URLSearchParams(location.search).get('theme');
+    if (forcedTheme === 'light' || forcedTheme === 'dark') applyTheme(forcedTheme, true);
+    applySidebar(localStorage.getItem(LS.sidebar) === 'collapsed', false);
     bindGlobal();
     try {
+      const session = await api('/api/auth/session');
+      if (session.setupRequired && !session.authenticated) {
+        location.href = '/setup.html';
+        return;
+      }
+      if (!session.authenticated) {
+        location.href = '/login.html?next=' + encodeURIComponent(location.pathname + location.hash);
+        return;
+      }
+      state.user = session.username || '';
+      const userLabel = $('#userLabel');
+      if (userLabel && state.user) {
+        userLabel.hidden = false;
+        $('#userName').textContent = state.user;
+      }
+
       await loadSettings();
       await loadCatalog();
       const m = location.hash.match(/^#\/f\/(.+)$/);
@@ -1008,7 +1411,7 @@
       }
       if (new URLSearchParams(location.search).has('selftest')) {
         const s = document.createElement('script');
-        s.src = 'js/selftest.js';
+        s.src = 'js/selftest.js?v=20261020b';
         document.body.append(s);
       }
     } catch (e) {

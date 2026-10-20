@@ -49,11 +49,15 @@ public static class YamlDocumentParser
 
     private sealed class Builder
     {
+        private const int MaxDepth = 200;
+        private const int MaxNodes = 200_000;
+
         private readonly List<ParsingEvent> _events;
         private readonly string _text;
         private readonly YamlDocument _doc;
         private readonly int[] _lineStarts;
         private int _i;
+        private int _nodes;
 
         public Builder(List<ParsingEvent> events, string text, YamlDocument doc)
         {
@@ -116,15 +120,20 @@ public static class YamlDocumentParser
             return root;
         }
 
-        private YamlNode ParseNode(KeyInfo? key, List<object> parentPath, object? segment)
+        private YamlNode ParseNode(KeyInfo? key, List<object> parentPath, object? segment, int depth = 0)
         {
+            if (depth > MaxDepth)
+                throw new InvalidOperationException($"YAML 嵌套层数超过 {MaxDepth} 层，已拒绝解析（防止恶意文件耗尽资源）。");
+            if (++_nodes > MaxNodes)
+                throw new InvalidOperationException($"YAML 节点数量超过 {MaxNodes} 个，已拒绝解析（防止恶意文件耗尽资源）。");
+
             if (_i >= _events.Count) throw new InvalidOperationException("YAML 事件流意外结束。");
             var evt = _events[_i];
 
             return evt switch
             {
-                MappingStart ms => ParseMapping(ms, key, parentPath, segment),
-                SequenceStart ss => ParseSequence(ss, key, parentPath, segment),
+                MappingStart ms => ParseMapping(ms, key, parentPath, segment, depth),
+                SequenceStart ss => ParseSequence(ss, key, parentPath, segment, depth),
                 Scalar sc => ParseScalar(sc, key, parentPath, segment),
                 AnchorAlias aa => ParseAlias(aa, key, parentPath, segment),
                 _ => throw new InvalidOperationException($"无法解析的节点类型：{evt.GetType().Name}")
@@ -149,7 +158,7 @@ public static class YamlDocumentParser
             return node;
         }
 
-        private YamlNode ParseMapping(MappingStart start, KeyInfo? key, List<object> parentPath, object? segment)
+        private YamlNode ParseMapping(MappingStart start, KeyInfo? key, List<object> parentPath, object? segment, int depth)
         {
             var node = NewNode(YamlKind.Mapping, key, parentPath, segment);
             node.Line = (int)start.Start.Line;
@@ -158,15 +167,14 @@ public static class YamlDocumentParser
             node.Tag = start.Tag.IsEmpty ? null : start.Tag.Value;
             _i++;
 
-            var seen = new HashSet<string>(StringComparer.Ordinal);
             while (_i < _events.Count && _events[_i] is not MappingEnd)
             {
                 if (_events[_i] is not Scalar keyScalar)
                 {
-                    // 复杂键（? {...}）在插件配置里极罕见：跳过这一对，保持文件只读提示
+                    // 复杂键（? {...}）在插件配置里极罕见：跳过这一对
                     _doc.Warnings.Add($"第 {_events[_i].Start.Line} 行存在复杂键，已跳过。");
-                    ParseNode(null, node.Path, null);
-                    if (_i < _events.Count && _events[_i] is not MappingEnd) ParseNode(null, node.Path, null);
+                    ParseNode(null, node.Path, null, depth + 1);
+                    if (_i < _events.Count && _events[_i] is not MappingEnd) ParseNode(null, node.Path, null, depth + 1);
                     continue;
                 }
 
@@ -175,11 +183,15 @@ public static class YamlDocumentParser
                 var keyComment = FindComment((int)keyScalar.End.Index, (int)keyScalar.Start.Index);
                 var info = new KeyInfo(keyScalar.Value, keyRaw, (int)keyScalar.Start.Line, (int)keyScalar.Start.Column - 1, keyComment);
 
-                if (!seen.Add(keyScalar.Value))
-                    _doc.Warnings.Add($"第 {(int)keyScalar.Start.Line} 行存在重复键「{keyScalar.Value}」，网页中显示第一处。");
-
-                var child = ParseNode(info, node.Path, keyScalar.Value);
-                if (!node.Children.Any(c => c.Key == child.Key)) node.Children.Add(child);
+                var child = ParseNode(info, node.Path, keyScalar.Value, depth + 1);
+                var existing = node.Children.FindIndex(c => c.Key == child.Key);
+                if (existing >= 0)
+                {
+                    // YAML 规范下重复键以最后一处为准（SnakeYAML 亦然），这里保持同样语义并给出提示
+                    _doc.Warnings.Add($"第 {(int)keyScalar.Start.Line} 行重复键「{keyScalar.Value}」，按 YAML 规范以最后一处为准。");
+                    node.Children[existing] = child;
+                }
+                else node.Children.Add(child);
             }
 
             if (_i < _events.Count && _events[_i] is MappingEnd me)
@@ -192,7 +204,7 @@ public static class YamlDocumentParser
             return node;
         }
 
-        private YamlNode ParseSequence(SequenceStart start, KeyInfo? key, List<object> parentPath, object? segment)
+        private YamlNode ParseSequence(SequenceStart start, KeyInfo? key, List<object> parentPath, object? segment, int depth)
         {
             var node = NewNode(YamlKind.Sequence, key, parentPath, segment);
             node.Line = (int)start.Start.Line;
@@ -204,7 +216,7 @@ public static class YamlDocumentParser
             int index = 0;
             while (_i < _events.Count && _events[_i] is not SequenceEnd)
             {
-                var child = ParseNode(null, node.Path, index);
+                var child = ParseNode(null, node.Path, index, depth + 1);
                 if (child.Key is null) child.Index = index;
                 node.Children.Add(child);
                 index++;

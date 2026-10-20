@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using MCServerPanel.Models;
+using MCServerPanel.Services.Auth;
 using MCServerPanel.Yaml;
 
 namespace MCServerPanel.Services;
@@ -110,8 +111,15 @@ public sealed class ConfigService
         new(StringComparer.OrdinalIgnoreCase);
 
     private readonly PluginCatalog _catalog;
+    private readonly EditSessionRegistry _sessions;
+    private readonly AuditLog _audit;
 
-    public ConfigService(PluginCatalog catalog) => _catalog = catalog;
+    public ConfigService(PluginCatalog catalog, EditSessionRegistry sessions, AuditLog audit)
+    {
+        _catalog = catalog;
+        _sessions = sessions;
+        _audit = audit;
+    }
 
     public ConfigResponse Load(string relativePath)
     {
@@ -121,7 +129,44 @@ public sealed class ConfigService
         return Build(relativePath, full, loaded.Text, doc, TextFile.Hash(File.ReadAllBytes(full)));
     }
 
-    public SaveResponse Save(SaveRequest request)
+    /// <summary>轮询用：返回当前磁盘哈希、是否有外部改动、编辑占用情况。</summary>
+    public WatchDto Watch(string relativePath, string? clientId, string? clientName, string? since)
+    {
+        var full = _catalog.ResolveConfigPath(relativePath);
+        var info = new FileInfo(full);
+        var hash = TextFile.Hash(full);
+
+        var busy = false;
+        LockDto? holder = null;
+        if (!string.IsNullOrWhiteSpace(clientId))
+        {
+            var claim = _sessions.Claim(relativePath, clientId!, clientName ?? "未命名用户", takeover: false);
+            if (claim.Ok) _sessions.Renew(clientId!);
+            else { busy = true; holder = claim.Holder; }
+        }
+
+        return new WatchDto
+        {
+            Hash = hash,
+            Size = info.Length,
+            LastWrite = info.LastWriteTime,
+            Changed = since is not null && !string.Equals(since, hash, StringComparison.OrdinalIgnoreCase),
+            LockBusy = busy,
+            Holder = holder,
+            Locks = _sessions.Snapshot(clientId)
+        };
+    }
+
+    public ClaimResultDto Claim(string relativePath, string clientId, string? clientName, bool takeover)
+    {
+        _catalog.ResolveConfigPath(relativePath);
+        var result = _sessions.Claim(relativePath, clientId, clientName ?? "未命名用户", takeover);
+        return new ClaimResultDto { Ok = result.Ok, Holder = result.Holder, Previous = result.Previous };
+    }
+
+    public void Release(string clientId) => _sessions.Release(clientId);
+
+    public SaveResponse Save(SaveRequest request, string? actor = null, string? ip = null)
     {
         if (request.Edits.Count == 0) throw new PanelException("没有需要保存的改动。");
         var full = _catalog.ResolveConfigPath(request.File);
@@ -131,6 +176,14 @@ public sealed class ConfigService
         {
             var bytes = File.ReadAllBytes(full);
             var hash = TextFile.Hash(bytes);
+            if (!request.Force)
+            {
+                var holder = _sessions.HolderOf(request.File);
+                if (holder is not null && !holder.ClientId.Equals(request.ClientId ?? "", StringComparison.Ordinal))
+                    throw new PanelException(
+                        $"「{holder.ClientName}」正在编辑这个文件（{holder.AgeSeconds} 秒前还有操作），已阻止同时写入。\n" +
+                        "请先点「接管编辑」，或等对方保存完再改。", 423);
+            }
             if (!request.Force && request.BaseHash is not null && !string.Equals(hash, request.BaseHash, StringComparison.OrdinalIgnoreCase))
                 throw new PanelException("这个文件在磁盘上已被修改。请重新加载，确认后再保存。", 409);
 
@@ -152,6 +205,7 @@ public sealed class ConfigService
             if (backup is null) warnings.Add("备份旧文件失败，但已写入新配置。");
 
             TextFile.WriteAtomic(full, applied.NewText, encoding, bomLength > 0);
+            if (!string.IsNullOrWhiteSpace(request.ClientId)) _sessions.Renew(request.ClientId!);
 
             var newBytes = File.ReadAllBytes(full);
             var newHash = TextFile.Hash(newBytes);
@@ -168,6 +222,15 @@ public sealed class ConfigService
                 throw new PanelException($"写入后注释校验失败，请用备份恢复：{backup}", 500);
 
             warnings.AddRange(applied.Warnings);
+            _audit.Write("save", actor, ip, new
+            {
+                file = request.File,
+                keys = request.Edits.Select(e => YamlPath.Display(YamlPath.FromJson(e.Path))).ToArray(),
+                oldHash = hash[..12],
+                newHash = newHash[..12],
+                forced = request.Force,
+                backup
+            });
             return new SaveResponse
             {
                 Config = Build(request.File, full, newText, newDoc, newHash),

@@ -1,20 +1,24 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MCServerPanel · 插件配置面板</title>
+<script src="js/theme-init.js"></script>
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
-<div class="app">
-  <aside class="sidebar">
+<div class="app" id="app">
+  <aside class="sidebar" id="sidebar">
     <div class="brand">
       <div class="logo">MC</div>
       <div class="brand-text">
         <div class="brand-title">MCServerPanel</div>
         <div class="brand-sub">插件配置可视化</div>
       </div>
+      <button class="icon-btn tiny" id="btnCollapse" title="折叠插件列表（Ctrl+B）" aria-label="折叠插件列表">
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M14.7 5.3 8 12l6.7 6.7 1.4-1.4L10.8 12l5.3-5.3Z"/></svg>
+      </button>
     </div>
 
     <button class="server-chip" id="serverChip" title="点击修改服务端地址">
@@ -31,20 +35,31 @@
       <div class="placeholder">正在加载…</div>
     </div>
 
+    <div class="sidebar-user" id="userLabel" hidden>已登录：<b id="userName">—</b></div>
+
     <div class="sidebar-foot">
       <button class="ghost-btn" id="btnSettings">设置</button>
-      <button class="ghost-btn" id="btnRefresh">刷新列表</button>
+      <button class="ghost-btn" id="btnRefresh">刷新</button>
+      <button class="ghost-btn" id="btnLogout" title="退出登录">退出</button>
     </div>
   </aside>
 
   <main class="main">
     <header class="topbar">
+      <button class="icon-btn" id="btnSidebar" title="展开插件列表（Ctrl+B）" aria-label="展开插件列表">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M3 5h18v2H3Zm0 6h18v2H3Zm0 6h18v2H3Z"/></svg>
+      </button>
       <div class="crumbs" id="crumbs"><span class="muted">从左侧选择一个配置文件</span></div>
       <div class="top-actions">
+        <button class="icon-btn" id="btnTheme" title="切换亮色 / 暗色（Ctrl+Shift+L）" aria-label="切换主题">
+          <span id="themeIcon">☾</span>
+        </button>
         <button class="ghost-btn" id="btnRaw" disabled>查看源码</button>
         <button class="ghost-btn" id="btnReload" disabled>重新加载</button>
       </div>
     </header>
+
+    <div class="alert-bar" id="alertBar" hidden></div>
 
     <div class="content" id="content">
       <div class="welcome">
@@ -72,6 +87,6 @@
 
 <div id="modalRoot"></div>
 <div id="toastRoot" class="toast-root"></div>
-<script src="js/app.js"></script>
+<script src="js/app.js?v=20261020b"></script>
 </body>
 </html>

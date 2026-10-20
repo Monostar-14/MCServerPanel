@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>登录 · MCServerPanel</title>
+<script src="js/theme-init.js"></script>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body class="auth-body">
+<main class="auth-wrap">
+  <form class="auth-card" id="loginForm" autocomplete="on" novalidate>
+    <div class="auth-brand">
+      <div class="logo">MC</div>
+      <div>
+        <div class="auth-title">MCServerPanel</div>
+        <div class="auth-sub">插件配置面板</div>
+      </div>
+    </div>
+
+    <div class="auth-notice" id="notice" hidden></div>
+
+    <div class="field">
+      <label for="username">用户名</label>
+      <input class="text-input" id="username" name="username" type="text" autocomplete="username" value="admin" required>
+    </div>
+    <div class="field">
+      <label for="password">密码</label>
+      <input class="text-input" id="password" name="password" type="password" autocomplete="current-password" required>
+    </div>
+
+    <div class="field-error" id="error" hidden></div>
+
+    <button class="primary-btn auth-submit" id="submitBtn" type="submit">登录</button>
+    <div class="auth-foot">
+      <span>忘记密码？请在服务器本机执行 <code>MCServerPanel --reset-password</code></span>
+    </div>
+  </form>
+</main>
+<script src="js/login.js"></script>
+</body>
+</html>

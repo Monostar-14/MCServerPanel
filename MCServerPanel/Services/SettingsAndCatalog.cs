@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using MCServerPanel.Models;
+using MCServerPanel.Security;
 
 namespace MCServerPanel.Services;
 
@@ -14,7 +15,8 @@ public sealed class PanelSettings
 {
     public string? ServerPath { get; set; }
     public int Port { get; set; } = 8989;
-    public bool AllowLan { get; set; } = true;
+    /// <summary>默认只监听回环；需要局域网/公网访问时必须显式打开，且必须已设置密码。</summary>
+    public bool AllowLan { get; set; }
 }
 
 public sealed class SettingsStore
@@ -27,13 +29,16 @@ public sealed class SettingsStore
     };
 
     public string FilePath { get; }
+    public string DataDir { get; }
     public PanelSettings Current { get; private set; } = new();
 
-    public SettingsStore()
+    public SettingsStore(string? dataDir = null)
     {
-        var dir = System.IO.Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MCServerPanel");
+        var dir = string.IsNullOrWhiteSpace(dataDir)
+            ? System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MCServerPanel")
+            : System.IO.Path.GetFullPath(dataDir);
         Directory.CreateDirectory(dir);
+        DataDir = dir;
         FilePath = System.IO.Path.Combine(dir, "settings.json");
         Current = Load();
     }
@@ -146,10 +151,30 @@ public sealed class PluginCatalog
     private static readonly Regex VersionRegex = new(@"-(\d[0-9A-Za-z.\-+]*)\.jar$", RegexOptions.Compiled);
 
     private readonly SettingsStore _settings;
+    private readonly string? _lockedRoot;
 
-    public PluginCatalog(SettingsStore settings) => _settings = settings;
+    public PluginCatalog(SettingsStore settings, string? lockedPluginsRoot = null)
+    {
+        _settings = settings;
+        _lockedRoot = string.IsNullOrWhiteSpace(lockedPluginsRoot) ? null : Path.GetFullPath(lockedPluginsRoot);
+    }
 
-    public Layout CurrentLayout => ServerLayout.Resolve(_settings.Current.ServerPath);
+    /// <summary>是否由启动参数/环境变量固定了插件根（固定后网页不能再改）。</summary>
+    public bool RootLocked => _lockedRoot is not null;
+    public string? LockedRoot => _lockedRoot;
+
+    public Layout CurrentLayout
+    {
+        get
+        {
+            if (_lockedRoot is not null)
+            {
+                var hints = new List<string> { "插件根由启动配置固定，网页中不可更改" };
+                return new Layout(Path.GetDirectoryName(_lockedRoot), _lockedRoot, null, hints);
+            }
+            return ServerLayout.Resolve(_settings.Current.ServerPath);
+        }
+    }
 
     public CatalogDto Build()
     {
@@ -247,13 +272,21 @@ public sealed class PluginCatalog
             yield break;
         }
 
+        int scanned = 0;
         foreach (var file in files)
         {
+            if (++scanned > 5000) yield break;
+            if (scanned > 2000) yield break; // 防止超大 plugins 目录拖垮页面
             var rel = Path.GetRelativePath(root, file.FullName);
             var segments = rel.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             if (segments.Length - 1 > 3) continue;
             if (segments.Take(segments.Length - 1).Any(s => SkipFolders.Contains(s) || s.StartsWith('.'))) continue;
             if (file.Length > 4 * 1024 * 1024) continue;
+            try
+            {
+                if ((file.Attributes & FileAttributes.ReparsePoint) != 0) continue;
+            }
+            catch { continue; }
             yield return file;
         }
     }
@@ -262,20 +295,13 @@ public sealed class PluginCatalog
         ext.Equals(".yml", StringComparison.OrdinalIgnoreCase) ||
         ext.Equals(".yaml", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>把网页传来的相对路径解析成绝对路径，并确保它没有跳出 plugins 目录。</summary>
+    /// <summary>把网页传来的相对路径解析成绝对路径，并确保它没有跳出 plugins 目录（含符号链接）。</summary>
     public string ResolveConfigPath(string relativePath)
     {
         var layout = CurrentLayout;
         if (layout.PluginsPath is null) throw new PanelException(layout.Error ?? "无法定位 plugins 目录。", 409);
-        if (string.IsNullOrWhiteSpace(relativePath)) throw new PanelException("缺少文件参数。");
 
-        var root = Path.GetFullPath(layout.PluginsPath);
-        var full = Path.GetFullPath(Path.Combine(root, relativePath.Replace('/', Path.DirectorySeparatorChar)));
-        var rootWithSep = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
-
-        if (!full.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase) &&
-            !full.Equals(root, StringComparison.OrdinalIgnoreCase))
-            throw new PanelException("非法的文件路径。", 400);
+        var full = PathPolicy.ResolveFileInside(layout.PluginsPath, relativePath);
         if (!IsYaml(Path.GetExtension(full))) throw new PanelException("只能编辑 .yml / .yaml 文件。");
         if (!File.Exists(full)) throw new PanelException("文件不存在：" + relativePath, 404);
         return full;

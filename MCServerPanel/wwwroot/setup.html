@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>初始化 · MCServerPanel</title>
+<script src="js/theme-init.js"></script>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body class="auth-body">
+<main class="auth-wrap">
+  <form class="auth-card" id="setupForm" autocomplete="off" novalidate>
+    <div class="auth-brand">
+      <div class="logo">MC</div>
+      <div>
+        <div class="auth-title">首次初始化</div>
+        <div class="auth-sub">为面板设置管理员密码</div>
+      </div>
+    </div>
+
+    <div class="auth-notice">
+      初始化令牌只打印在<strong>服务器控制台</strong>（或 systemd 日志）里。如果你不是服务器管理员，请不要继续。
+    </div>
+
+    <div class="field">
+      <label for="token">初始化令牌</label>
+      <input class="text-input" id="token" name="token" type="text" spellcheck="false" autocomplete="off" required>
+    </div>
+    <div class="field">
+      <label for="username">管理员用户名</label>
+      <input class="text-input" id="username" name="username" type="text" autocomplete="username" value="admin" required>
+    </div>
+    <div class="field">
+      <label for="password">密码（至少 10 位）</label>
+      <input class="text-input" id="password" name="password" type="password" autocomplete="new-password" minlength="10" required>
+    </div>
+    <div class="field">
+      <label for="password2">再输一次</label>
+      <input class="text-input" id="password2" name="password2" type="password" autocomplete="new-password" minlength="10" required>
+    </div>
+
+    <div class="field-error" id="error" hidden></div>
+
+    <button class="primary-btn auth-submit" id="submitBtn" type="submit">设置密码并进入</button>
+    <div class="auth-foot">
+      <span>建议使用密码管理器生成的 14 位以上随机密码。</span>
+    </div>
+  </form>
+</main>
+<script src="js/setup.js"></script>
+</body>
+</html>

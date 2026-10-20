@@ -1,0 +1,26 @@
+# Demo 插件配置（自动化测试夹具，内容与任何真实插件无关）
+# 这段注释必须原样保留
+
+#  版本更新检测 & 公告
+#  测试夹具，不联网
+UpdateChecker:
+  Enabled: true          # 是否启用更新检测
+  Announcement: true
+  AdminPermission: snowygems.admin
+  NotifyAdminOnJoin: true
+  AnnouncementThrottleMinutes: 5   # 单位: 分钟
+  VersionUrl: "https://example.invalid/version.txt"
+  AnnouncementUrl: "https://example.invalid/ann.txt"
+  Timeout: 5
+
+# 可被标记成镶嵌台的方块种类
+tagged-blocks:
+  - STONE #石头
+  - GRASS_BLOCK #草方块
+  - DIAMOND_BLOCK #钻石块
+  - NETHERITE_BLOCK #下界合金块
+
+# 多行文本示例
+message: |
+  第一行
+  第二行

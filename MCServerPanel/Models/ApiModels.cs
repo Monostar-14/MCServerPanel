@@ -67,7 +67,48 @@ public sealed class SaveRequest
     public string File { get; set; } = "";
     public string? BaseHash { get; set; }
     public bool Force { get; set; }
+    public string? ClientId { get; set; }
     public List<Yaml.YamlEditRequest> Edits { get; set; } = new();
+}
+
+public sealed class ClaimRequest
+{
+    public string File { get; set; } = "";
+    public string ClientId { get; set; } = "";
+    public string? ClientName { get; set; }
+    public bool Takeover { get; set; }
+}
+
+public sealed class ReleaseRequest
+{
+    public string ClientId { get; set; } = "";
+}
+
+public sealed class LockDto
+{
+    public string File { get; set; } = "";
+    public string ClientId { get; set; } = "";
+    public string ClientName { get; set; } = "";
+    public int AgeSeconds { get; set; }
+    public bool Mine { get; set; }
+}
+
+public sealed class ClaimResultDto
+{
+    public bool Ok { get; set; }
+    public LockDto? Holder { get; set; }
+    public LockDto? Previous { get; set; }
+}
+
+public sealed class WatchDto
+{
+    public string Hash { get; set; } = "";
+    public long Size { get; set; }
+    public DateTime LastWrite { get; set; }
+    public bool Changed { get; set; }
+    public bool LockBusy { get; set; }
+    public LockDto? Holder { get; set; }
+    public List<LockDto> Locks { get; set; } = new();
 }
 
 public sealed class SaveResponse
@@ -85,10 +126,12 @@ public sealed class SettingsDto
     public List<string> Hints { get; set; } = new();
     public int Port { get; set; } = 8989;
     public int ActualPort { get; set; }
-    public bool AllowLan { get; set; } = true;
+    public bool AllowLan { get; set; }
     public List<string> Urls { get; set; } = new();
     public string SettingsFile { get; set; } = "";
     public bool RestartRequired { get; set; }
+    public bool AuthConfigured { get; set; }
+    public bool PluginsRootLocked { get; set; }
 }
 
 public sealed class SettingsRequest

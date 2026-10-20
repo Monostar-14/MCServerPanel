@@ -1,38 +1,93 @@
 @MCServerPanel_HostAddress = http://localhost:8989
+@csrf = 1
 
-### 健康检查（实际端口 / 局域网地址）
+### 未登录：health 只给最小信息
 GET {{MCServerPanel_HostAddress}}/api/health
 Accept: application/json
 
+### 当前会话状态
+GET {{MCServerPanel_HostAddress}}/api/auth/session
+
+### 首次初始化（token 见服务器控制台；只能成功一次）
+POST {{MCServerPanel_HostAddress}}/api/auth/setup
+Content-Type: application/json
+X-MCSP-CSRF: {{csrf}}
+
+{
+  "token": "<控制台打印的一次性令牌>",
+  "username": "admin",
+  "password": "<至少 10 位>"
+}
+
+### 登录（把响应里的 Set-Cookie 手动用于后续请求）
+POST {{MCServerPanel_HostAddress}}/api/auth/login
+Content-Type: application/json
+X-MCSP-CSRF: {{csrf}}
+
+{
+  "username": "admin",
+  "password": "<你的密码>"
+}
+
+### 修改密码（会吊销所有会话）
+POST {{MCServerPanel_HostAddress}}/api/auth/change-password
+Content-Type: application/json
+X-MCSP-CSRF: {{csrf}}
+Cookie: mcsp_session=<登录后拿到的值>
+
+{
+  "currentPassword": "<旧密码>",
+  "newPassword": "<至少 10 位>"
+}
+
+### 退出登录
+POST {{MCServerPanel_HostAddress}}/api/auth/logout
+X-MCSP-CSRF: {{csrf}}
+Cookie: mcsp_session=<登录后拿到的值>
+
+### 健康检查（登录后：端口 / 局域网地址 / 设置文件）
+GET {{MCServerPanel_HostAddress}}/api/health
+Cookie: mcsp_session=<登录后拿到的值>
+
 ### 读取设置
 GET {{MCServerPanel_HostAddress}}/api/settings
+Cookie: mcsp_session=<登录后拿到的值>
 
-### 设置服务端目录 + 端口
+### 设置服务端目录 + 端口（固定插件根时不能改目录）
 POST {{MCServerPanel_HostAddress}}/api/settings
 Content-Type: application/json
+X-MCSP-CSRF: {{csrf}}
+Cookie: mcsp_session=<登录后拿到的值>
 
 {
   "serverPath": "D:\\Server 1.21.11",
   "port": 8989,
-  "allowLan": true
+  "allowLan": false
 }
 
-### 目录浏览（不带 path 时返回盘符）
+### 目录浏览（固定插件根后返回 403）
 GET {{MCServerPanel_HostAddress}}/api/browse?path=D:\Server 1.21.11
+Cookie: mcsp_session=<登录后拿到的值>
 
 ### 插件与配置文件清单
 GET {{MCServerPanel_HostAddress}}/api/catalog
+Cookie: mcsp_session=<登录后拿到的值>
 
 ### 读取一个配置文件
 GET {{MCServerPanel_HostAddress}}/api/config?file=SnowyGems/config.yml
+Cookie: mcsp_session=<登录后拿到的值>
 
-### 改值保存（expectedRaw 取自 /api/config 返回的 raw，用于检测外部改动）
+### 改值保存（expectedRaw 取自 /api/config 返回的 raw；写请求必须带 X-MCSP-CSRF）
 POST {{MCServerPanel_HostAddress}}/api/config/save
 Content-Type: application/json
+X-MCSP-CSRF: {{csrf}}
+Cookie: mcsp_session=<登录后拿到的值>
 
 {
   "file": "SnowyGems/config.yml",
   "baseHash": "<从 /api/config 拿到的 hash>",
+  "force": false,
+  "clientId": "c-manual-test",
   "edits": [
     {
       "path": ["Debug"],
@@ -41,4 +96,35 @@ Content-Type: application/json
       "expectedRaw": "false"
     }
   ]
+}
+
+### 登记编辑占用（takeover=true 表示接管别人的编辑权）
+POST {{MCServerPanel_HostAddress}}/api/config/claim
+Content-Type: application/json
+X-MCSP-CSRF: {{csrf}}
+Cookie: mcsp_session=<登录后拿到的值>
+
+{
+  "file": "SnowyGems/config.yml",
+  "clientId": "c-manual-test",
+  "clientName": "手动测试",
+  "takeover": false
+}
+
+### 轮询：磁盘哈希 + 占用状态（since 传当前页面的 hash）
+GET {{MCServerPanel_HostAddress}}/api/config/watch?file=SnowyGems/config.yml&clientId=c-manual-test&clientName=手动测试&since=<hash>
+Cookie: mcsp_session=<登录后拿到的值>
+
+### 当前所有编辑占用
+GET {{MCServerPanel_HostAddress}}/api/locks?clientId=c-manual-test
+Cookie: mcsp_session=<登录后拿到的值>
+
+### 释放占用
+POST {{MCServerPanel_HostAddress}}/api/config/release
+Content-Type: application/json
+X-MCSP-CSRF: {{csrf}}
+Cookie: mcsp_session=<登录后拿到的值>
+
+{
+  "clientId": "c-manual-test"
 }
