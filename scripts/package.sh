@@ -4,8 +4,9 @@
 set -euo pipefail
 
 VERSION="${1:-1.0.0}"
-OUT="${2:-$PWD/dist}"
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
+# 默认输出到仓库内的 scripts/dist，产物跟源码放在同一棵目录树下（.gitignore 的 dist/ 规则已覆盖）
+OUT="${2:-$REPO/scripts/dist}"
 PROJ="$REPO/MCServerPanel/MCServerPanel.csproj"
 
 cd "$REPO"

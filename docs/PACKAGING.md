@@ -39,13 +39,13 @@ dotnet publish MCServerPanel/MCServerPanel.csproj -c Release -r win-x64 `
   -p:IncludeNativeLibrariesForSelfExtract=true `
   -p:DebugType=none -p:DebugSymbols=false `
   -p:Version=1.0.0 `
-  -p:PublishDir=../dist/win-x64/
+  -p:PublishDir=../scripts/dist/win-x64/
 ```
 
-产物在仓库根的 `dist/win-x64/`：
+产物在 `scripts/dist/win-x64/`（跟源码同一棵目录树，.gitignore 的 `dist/` 规则已覆盖）：
 
 ```
-dist/win-x64/
+scripts/dist/win-x64/
 ├─ MCServerPanel.exe          ← 主程序（单文件，自包含运行时）
 ├─ appsettings.json
 ├─ appsettings.Development.json   （可删）
@@ -64,7 +64,7 @@ dist/win-x64/
 压缩：
 
 ```powershell
-Compress-Archive -Path dist/win-x64/* -DestinationPath dist/MCServerPanel-1.0.0-win-x64.zip
+Compress-Archive -Path scripts/dist/win-x64/* -DestinationPath scripts/dist/MCServerPanel-1.0.0-win-x64.zip
 ```
 
 ## 2. Linux x64
@@ -76,14 +76,14 @@ dotnet publish MCServerPanel/MCServerPanel.csproj -c Release -r linux-x64 \
   -p:IncludeNativeLibrariesForSelfExtract=true \
   -p:DebugType=none -p:DebugSymbols=false \
   -p:Version=1.0.0 \
-  -p:PublishDir=../dist/linux-x64/
+  -p:PublishDir=../scripts/dist/linux-x64/
 ```
 
 打包时要保留可执行位：
 
 ```bash
-chmod +x dist/linux-x64/MCServerPanel
-tar -czf dist/MCServerPanel-1.0.0-linux-x64.tar.gz -C dist/linux-x64 .
+chmod +x scripts/dist/linux-x64/MCServerPanel
+tar -czf scripts/dist/MCServerPanel-1.0.0-linux-x64.tar.gz -C scripts/dist/linux-x64 .
 ```
 
 > 在 Windows 上直接生成 tar.gz 时执行位会丢失；用户解压后执行 `chmod +x MCServerPanel` 即可，
@@ -155,7 +155,7 @@ WantedBy=multi-user.target
 ```bash
 sudo useradd -r -s /usr/sbin/nologin mcpanel
 sudo mkdir -p /opt/mcserverpanel /var/lib/mcpanel
-sudo cp -r dist/linux-x64/* /opt/mcserverpanel/
+sudo cp -r scripts/dist/linux-x64/* /opt/mcserverpanel/
 sudo chown -R root:root /opt/mcserverpanel
 sudo chown -R mcpanel:mcpanel /var/lib/mcpanel
 # plugins 目录给 mcpanel 写权限（按实际属组调整）
@@ -191,8 +191,8 @@ sudo journalctl -u mcserverpanel -f
 ## 6. 常见坑
 
 1. **输出路径不能含单引号**：家目录里带 `'` 的账号（形如 `C:\Users\O'Brien\`）直接
-   `-p:PublishDir=C:/Users/O'Brien/...` 会报 `MSB3094`。用相对路径（`../dist/win-x64/`）或 `E:\build\...`
-   这种不含 `'` 的目录。
+   `-p:PublishDir=C:/Users/O'Brien/...` 会报 `MSB3094`。用相对路径（`../scripts/dist/win-x64/`）或任何
+   不含 `'` 的绝对路径。
 2. **只发 exe 不发 `wwwroot`**：页面和接口 404，登录页打不开。
 3. **不要开 `PublishTrimmed=true`**：ASP.NET Core 的动态加载/静态资源会被裁掉，运行时才炸。
 4. **Linux 缺执行位**：`chmod +x MCServerPanel`；zip 不保留权限，用 tar 或解压后补。
@@ -218,7 +218,7 @@ python scripts/smoke_auth.py --skip-ui     # 认证/保存完整性
 然后跑一次发布产物（用临时目录，别碰真实服务端）：
 
 ```bash
-dist/win-x64/MCServerPanel.exe --no-browser --port 8990 --data-dir /tmp/mcsp-check --plugins-root /tmp/mcsp-plugins
+scripts/dist/win-x64/MCServerPanel.exe --no-browser --port 8990 --data-dir /tmp/mcsp-check --plugins-root /tmp/mcsp-plugins
 curl http://127.0.0.1:8990/api/health
 curl -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8990/login.html   # 应为 200
 ```
@@ -226,11 +226,11 @@ curl -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8990/login.html   # 应�
 生成校验和：
 
 ```powershell
-Get-FileHash dist/MCServerPanel-1.0.0-win-x64.zip -Algorithm SHA256
+Get-FileHash scripts/dist/MCServerPanel-1.0.0-win-x64.zip -Algorithm SHA256
 ```
 
 ```bash
-sha256sum dist/MCServerPanel-1.0.0-linux-x64.tar.gz > dist/SHA256SUMS
+sha256sum scripts/dist/MCServerPanel-1.0.0-linux-x64.tar.gz > scripts/dist/SHA256SUMS
 ```
 
 ## 8. 建议
@@ -238,4 +238,4 @@ sha256sum dist/MCServerPanel-1.0.0-linux-x64.tar.gz > dist/SHA256SUMS
 - 版本号统一从命令行传：`-p:Version=1.0.0`，压缩包名带版本和 RID。
 - 在 CI 上用矩阵分别构建（`windows-latest` 出 win 包，`ubuntu-latest` 出 linux 包），
   避免跨平台细节差异，也方便附校验和与 artifact attestation。
-- `dist/` 已加入 `.gitignore`，不要把产物提交进仓库，发 GitHub Release。
+- 产物统一放 `scripts/dist/`（`.gitignore` 里的 `dist/` 规则覆盖它），不要把产物提交进仓库，发 GitHub Release。

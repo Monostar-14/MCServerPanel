@@ -1,10 +1,11 @@
 ﻿# 一键打包 Windows + Linux 发布包（在 Windows 上运行）
 # 用法：
 #   powershell -ExecutionPolicy Bypass -File .\scripts\package.ps1
-#   powershell -ExecutionPolicy Bypass -File .\scripts\package.ps1 -Version 1.0.1 -OutDir E:\build\mcsp
+#   powershell -ExecutionPolicy Bypass -File .\scripts\package.ps1 -Version 1.0.1 -OutDir scripts\dist-1.0.1
+# 默认输出到仓库内的 scripts\dist，产物跟源码放在同一棵目录树下（已被 .gitignore 的 dist/ 规则覆盖）。
 param(
     [string]$Version = "1.0.0",
-    [string]$OutDir = "E:\build\mcsp-release"
+    [string]$OutDir = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -13,6 +14,20 @@ try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
 $repo = Split-Path -Parent $PSScriptRoot
 $proj = Join-Path $repo "MCServerPanel\MCServerPanel.csproj"
 Set-Location $repo
+
+# 默认输出目录：仓库内的 scripts\dist；相对路径按仓库根解析，绝对路径照用
+if ([string]::IsNullOrWhiteSpace($OutDir)) {
+    $OutDir = Join-Path $repo "scripts\dist"
+} elseif (-not [System.IO.Path]::IsPathRooted($OutDir)) {
+    $OutDir = Join-Path $repo $OutDir
+}
+$OutDir = [System.IO.Path]::GetFullPath($OutDir)
+
+# 防呆：输出目录必须是脚本同级的 dist*，避免误删仓库里的源码目录
+$distRoot = Join-Path $repo "scripts"
+if (-not $OutDir.StartsWith($distRoot, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "输出目录必须在 $distRoot 下面，当前是 $OutDir"
+}
 
 $common = @(
     "-c", "Release",
