@@ -7,6 +7,6 @@
     命令行 -Version 仍可临时覆盖，用于临时出别的版本号。
   -->
   <PropertyGroup>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
   </PropertyGroup>
 </Project>
