@@ -46,6 +46,10 @@ scripts/dist/SHA256SUMS.txt                         校验和
 等价的命令行入口：`make package` 或 `powershell -ExecutionPolicy Bypass -File scripts\package.ps1`；
 Linux/macOS 用 `./scripts/package.sh`。
 
+**版本号只在一个地方改**：仓库根的 `Directory.Build.props` 里的 `<Version>`。
+打包脚本不传 `-Version` 时会自动读它，产物名（zip / tar.gz）、程序里的 `/api/health` 与设置页显示的版本都跟着变；
+命令行 `-Version x.y.z` 仍可临时覆盖。
+
 ## 1. Windows x64
 
 ```powershell
@@ -251,7 +255,8 @@ sha256sum scripts/dist/MCServerPanel-1.0.0-linux-x64.tar.gz > scripts/dist/SHA25
 
 ## 8. 建议
 
-- 版本号统一从命令行传：`-p:Version=1.0.0`，压缩包名带版本和 RID。
+- 版本号在 `Directory.Build.props` 的 `<Version>` 里统一维护，打包脚本自动读取；命令行 `-Version` 只用于临时覆盖，
+  压缩包名带版本和 RID。
 - 在 CI 上用矩阵分别构建（`windows-latest` 出 win 包，`ubuntu-latest` 出 linux 包），
   避免跨平台细节差异，也方便附校验和与 artifact attestation。
 - 产物统一放 `scripts/dist/`（`.gitignore` 里的 `dist/` 规则覆盖它），不要把产物提交进仓库，发 GitHub Release。

@@ -1,0 +1,12 @@
+<Project>
+  <!--
+    版本号只在这一处维护。
+    · 打包（scripts/package.cmd / .ps1 / .sh）不传 -Version 时自动读这里的值，产物名跟着变
+    · 程序里的 /api/health 与设置页显示的版本也来自这里（AssemblyVersion）
+    发新版只改下面这一行，例如 1.1.0，然后双击 scripts\package.cmd 即可。
+    命令行 -Version 仍可临时覆盖，用于临时出别的版本号。
+  -->
+  <PropertyGroup>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+</Project>

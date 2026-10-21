@@ -1,10 +1,12 @@
 ﻿# 一键打包 Windows + Linux 发布包（在 Windows 上运行）
 # 用法：
 #   powershell -ExecutionPolicy Bypass -File .\scripts\package.ps1
-#   powershell -ExecutionPolicy Bypass -File .\scripts\package.ps1 -Version 1.0.1 -OutDir scripts\dist-1.0.1
+#   powershell -ExecutionPolicy Bypass -File .\scripts\package.ps1 -OutDir scripts\dist
+# 版本号默认取仓库根的 Directory.Build.props 里的 <Version>（发版只改那一行），
+# 命令行 -Version 可临时覆盖：  -Version 1.0.1
 # 默认输出到仓库内的 scripts\dist，产物跟源码放在同一棵目录树下（已被 .gitignore 的 dist/ 规则覆盖）。
 param(
-    [string]$Version = "1.0.0",
+    [string]$Version = "",
     [string]$OutDir = ""
 )
 
@@ -35,9 +37,25 @@ $common = @(
     "-p:PublishSingleFile=true",
     "-p:IncludeNativeLibrariesForSelfExtract=true",
     "-p:DebugType=none",
-    "-p:DebugSymbols=false",
-    "-p:Version=$Version"
+    "-p:DebugSymbols=false"
 )
+
+# 版本号：命令行 -Version > Directory.Build.props / csproj 里的 <Version>
+if ([string]::IsNullOrWhiteSpace($Version)) {
+    $fromSource = $null
+    try {
+        $probe = & dotnet msbuild $proj -getProperty:Version -nologo 2>$null
+        if ($LASTEXITCODE -eq 0 -and $probe) { $fromSource = ([string]($probe | Select-Object -Last 1)).Trim() }
+    } catch { }
+    if ([string]::IsNullOrWhiteSpace($fromSource)) {
+        throw "拿不到版本号：请在仓库根 Directory.Build.props 里设置 <Version>，或用 -Version 传参"
+    }
+    $Version = $fromSource
+    Write-Host "==> 版本：$Version（来自 Directory.Build.props）" -ForegroundColor Cyan
+} else {
+    $common += "-p:Version=$Version"
+    Write-Host "==> 版本：$Version（命令行覆盖）" -ForegroundColor Cyan
+}
 
 Write-Host "==> out dir: $OutDir" -ForegroundColor Cyan
 if (Test-Path $OutDir) { Remove-Item $OutDir -Recurse -Force }

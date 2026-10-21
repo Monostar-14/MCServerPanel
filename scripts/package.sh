@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # 一键打包 Windows + Linux 发布包（在 Linux/macOS 上运行）
 # 用法： ./scripts/package.sh [版本号] [输出目录]
+#   版本号省略时取仓库根 Directory.Build.props 里的 <Version>（发版只改那一行）
 set -euo pipefail
 
-VERSION="${1:-1.0.0}"
+VERSION="${1:-}"
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 # 默认输出到仓库内的 scripts/dist，产物跟源码放在同一棵目录树下（.gitignore 的 dist/ 规则已覆盖）
 OUT="${2:-$REPO/scripts/dist}"
@@ -30,6 +31,15 @@ find_python() {
   done
   return 1
 }
+
+# 版本号：命令行参数 > Directory.Build.props / csproj 里的 <Version>
+if [ -z "$VERSION" ]; then
+  VERSION="$(dotnet msbuild "$(winpath "$PROJ")" -getProperty:Version -nologo 2>/dev/null | tail -1 | tr -d '\r' | tr -d ' ')"
+  [ -n "$VERSION" ] || { echo "拿不到版本号：请在 Directory.Build.props 里设置 <Version>，或传参" >&2; exit 1; }
+  echo "==> 版本：$VERSION（来自 Directory.Build.props）"
+else
+  echo "==> 版本：$VERSION（命令行覆盖）"
+fi
 
 publish() {
   local rid="$1"
