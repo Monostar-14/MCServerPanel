@@ -15,7 +15,15 @@ obj/
 [Oo]bj/
 artifacts/
 publish/
+
+# ===== 发布产物 =====
+# 打包脚本（package.cmd / package.ps1 / package.sh）统一把产物写到 scripts/dist：
+#   scripts/dist/win-x64/、scripts/dist/linux-x64/（未压缩）+ zip + tar.gz + SHA256SUMS.txt
+# 这些都是构建产物，不进版本库；发版走 GitHub Release。
 dist/
+scripts/dist/
+scripts/package.log
+
 *.mcpanel.tmp
 project.lock.json
 project.fragment.lock.json
