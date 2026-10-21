@@ -1,5 +1,7 @@
 @MCServerPanel_HostAddress = http://localhost:8989
 @csrf = 1
+# 改成你自己的服务端根目录（含 server.properties 与 plugins 的那一层）
+@serverPath = D:\Servers\paper
 
 ### 未登录：health 只给最小信息
 GET {{MCServerPanel_HostAddress}}/api/health
@@ -60,13 +62,13 @@ X-MCSP-CSRF: {{csrf}}
 Cookie: mcsp_session=<登录后拿到的值>
 
 {
-  "serverPath": "D:\\Server 1.21.11",
+  "serverPath": "D:\\Servers\\paper",
   "port": 8989,
   "allowLan": false
 }
 
 ### 目录浏览（固定插件根后返回 403）
-GET {{MCServerPanel_HostAddress}}/api/browse?path=D:\Server 1.21.11
+GET {{MCServerPanel_HostAddress}}/api/browse?path={{serverPath}}
 Cookie: mcsp_session=<登录后拿到的值>
 
 ### 插件与配置文件清单

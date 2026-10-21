@@ -179,8 +179,9 @@ sudo journalctl -u mcserverpanel -f
 
 ## 6. 常见坑
 
-1. **输出路径不能含单引号**：你的家目录是 `C:\Users\h's\...`，直接 `-p:PublishDir=C:/Users/h's/...` 会报
-   `MSB3094`。用相对路径（`../dist/win-x64/`）或 `E:\build\...` 这种不含 `'` 的目录。
+1. **输出路径不能含单引号**：家目录里带 `'` 的账号（形如 `C:\Users\O'Brien\`）直接
+   `-p:PublishDir=C:/Users/O'Brien/...` 会报 `MSB3094`。用相对路径（`../dist/win-x64/`）或 `E:\build\...`
+   这种不含 `'` 的目录。
 2. **只发 exe 不发 `wwwroot`**：页面和接口 404，登录页打不开。
 3. **不要开 `PublishTrimmed=true`**：ASP.NET Core 的动态加载/静态资源会被裁掉，运行时才炸。
 4. **Linux 缺执行位**：`chmod +x MCServerPanel`；zip 不保留权限，用 tar 或解压后补。

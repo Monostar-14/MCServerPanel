@@ -217,7 +217,7 @@
     const rootLocked = !!s.pluginsRootLocked;
     const pathInput = h('input', {
       class: 'text-input', type: 'text', value: s.serverPath || '',
-      placeholder: '例如 D:\\Server 1.21.11',
+      placeholder: '例如 D:\\Servers\\paper',
       readonly: rootLocked ? true : null,
       title: rootLocked ? '插件根由启动参数/环境变量固定' : null
     });

@@ -50,7 +50,7 @@ MCServerPanel.exe
 也可以直接选 `plugins` 目录。想彻底固定目录、不允许网页修改，用启动参数：
 
 ```bash
-MCServerPanel.exe --plugins-root "D:\Server 1.21.11\plugins"
+MCServerPanel.exe --plugins-root "D:\Servers\paper\plugins"
 ```
 
 ### 4. 改配置
