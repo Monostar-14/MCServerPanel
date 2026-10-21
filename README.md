@@ -110,6 +110,8 @@ MCServerPanel.exe --plugins-root "D:\Servers\paper\plugins"
 ## 部署建议
 
 打包成 Windows / Linux 可执行包（自包含单文件、服务注册、常见坑）见 **[docs/PACKAGING.md](docs/PACKAGING.md)**。
+Windows 上最省事：**双击 `scripts\package.cmd`**，一次产出 win-x64 / linux-x64 的未压缩目录 + zip + tar.gz + 校验和
+（产物统一在 `scripts/dist/`）。
 
 - **推荐**：服务器和家里电脑加入同一个 Tailscale 网络，面板只监听 `127.0.0.1`，
   用 `tailscale serve` 暴露成 `https://<机器名>.<tailnet>.ts.net`。公网不开放任何端口。

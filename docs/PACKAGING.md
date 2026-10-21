@@ -30,6 +30,22 @@ Linux 上对应 `./scripts/package.sh 1.0.0`。
 
 自包含单文件的 exe 里**不包含 `wwwroot`**（HTML/CSS/JS 是普通文件），所以必须整个目录分发。
 
+## 0. 一键打包（Windows，双击即可）
+
+双击 `scripts\package.cmd`（想指定版本号就在命令行跑 `scripts\package.cmd 1.0.1`），一次产出全部四种形态：
+
+```
+scripts/dist/win-x64/                               未压缩，Windows 直接用
+scripts/dist/linux-x64/                             未压缩，Linux 直接用（主程序已带 0755 执行位）
+scripts/dist/MCServerPanel-<版本>-win-x64.zip        压缩包
+scripts/dist/MCServerPanel-<版本>-linux-x64.tar.gz   压缩包
+scripts/dist/SHA256SUMS.txt                         校验和
+```
+
+跑完窗口自动关闭，不做别的事；完整日志在 `scripts\package.log`（每次覆盖）。
+等价的命令行入口：`make package` 或 `powershell -ExecutionPolicy Bypass -File scripts\package.ps1`；
+Linux/macOS 用 `./scripts/package.sh`。
+
 ## 1. Windows x64
 
 ```powershell
