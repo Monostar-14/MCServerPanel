@@ -30,13 +30,15 @@ public sealed class SettingsStore
 
     public string FilePath { get; }
     public string DataDir { get; }
+    /// <summary>目录是怎么选出来的（含不可写兜底时的提示）。</summary>
+    public DataDirChoice Location { get; }
     public PanelSettings Current { get; private set; } = new();
 
     public SettingsStore(string? dataDir = null)
     {
-        var dir = string.IsNullOrWhiteSpace(dataDir)
-            ? System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MCServerPanel")
-            : System.IO.Path.GetFullPath(dataDir);
+        // 默认放程序目录，避免用户去 %LOCALAPPDATA% 找；--data-dir 显式指定时以参数为准。
+        Location = DataLocations.Resolve(dataDir);
+        var dir = Location.Path;
         Directory.CreateDirectory(dir);
         DataDir = dir;
         FilePath = System.IO.Path.Combine(dir, "settings.json");
@@ -162,6 +164,9 @@ public sealed class PluginCatalog
     /// <summary>是否由启动参数/环境变量固定了插件根（固定后网页不能再改）。</summary>
     public bool RootLocked => _lockedRoot is not null;
     public string? LockedRoot => _lockedRoot;
+
+    /// <summary>运行时数据目录（备份跟着它走，不另外散落在别处）。</summary>
+    public string DataDir => _settings.DataDir;
 
     public Layout CurrentLayout
     {

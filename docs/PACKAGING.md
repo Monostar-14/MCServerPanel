@@ -57,6 +57,10 @@ dist/win-x64/
    └─ js/*.js
 ```
 
+首次运行后，主程序会在同目录自动生成 `settings.json`（服务端目录/端口/局域网开关）、`auth.json`
+（管理员账号，PBKDF2 加盐哈希）、`logs/`（审计日志）、`backups/`（保存前的旧文件备份，保留 30 天）。
+不需要预先创建；整个目录可整体拷走做备份或迁移。
+
 压缩：
 
 ```powershell
@@ -104,6 +108,13 @@ MCServerPanel.exe --plugins-root "D:\Server\plugins" --data-dir "C:\ProgramData\
 ```
 
 控制台会打印一次性初始化令牌，用浏览器打开 `http://127.0.0.1:8989/setup.html` 设置密码。
+
+数据默认写在**程序所在目录**（exe 旁边的 `settings.json` / `auth.json` / `logs/` / `backups/`）。
+上面两条命令显式用了 `--data-dir`，因为以服务方式运行时程序目录常常不可写（Program Files、`/usr/local/bin`），
+把数据放到 `C:\ProgramData\MCServerPanel` 或 `/var/lib/mcpanel` 这类可写目录更稳妥。
+程序目录不可写时，程序会自动回退到 `%LOCALAPPDATA%\MCServerPanel`（Linux 为 `~/.local/share/MCServerPanel`）
+并在控制台说明原因。
+
 以服务方式运行时看不到控制台，令牌会进日志：
 
 - Linux：`journalctl -u mcserverpanel -n 30`
@@ -187,8 +198,10 @@ sudo journalctl -u mcserverpanel -f
 4. **Linux 缺执行位**：`chmod +x MCServerPanel`；zip 不保留权限，用 tar 或解压后补。
 5. **`/tmp` 挂载了 noexec**：单文件需要解压原生库，设
    `DOTNET_BUNDLE_EXTRACT_BASE_DIR=/var/lib/mcpanel/extract` 指向可执行目录。
-6. **服务账号权限**：`--data-dir` 指向的目录必须可写（`auth.json`、`logs/`、`backups/`），
-   但账号只应拥有 `plugins` 的写权限，不要用 root/Administrator 跑。
+6. **服务账号权限**：数据目录（默认就是程序目录，`--data-dir` 可改）必须可写，面板要在里面建
+   `settings.json`、`auth.json`、`logs/`、`backups/`；装进 `Program Files` / `/usr/local/bin` 这类只读位置时
+   必须显式 `--data-dir`，否则会回退到用户目录（多用户机器上会各写各的）。账号只应拥有 `plugins` 的写权限，
+   不要用 root/Administrator 跑。
 7. **端口被占用会自动顺延**：启动日志里看实际监听端口，别假设一定是 8989。
 8. **默认只监听 `127.0.0.1`**：要在局域网/Tailscale 访问，先在设置里设好密码再打开「允许局域网」，
    或者用 `tailscale serve` 反代到回环。不要把端口直接映射到公网。

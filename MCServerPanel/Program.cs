@@ -23,7 +23,20 @@ builder.Services.ConfigureHttpJsonOptions(o =>
 });
 
 // ---------- 基础组件 ----------
-var settingsStore = new SettingsStore(ArgValue(args, "--data-dir"));
+// 数据目录规则：--data-dir > 程序所在目录（便携）> 程序目录不可写时回退用户目录。
+var explicitDataDir = ArgValue(args, "--data-dir");
+var dataLocation = DataLocations.Resolve(explicitDataDir);
+
+// 1.0.0 及更早版本把数据放在 %LOCALAPPDATA%\MCServerPanel；升级后一次性复制过来，
+// 避免用户到处找文件。新目录已有数据时不覆盖，旧目录原样保留。
+string? legacyImportNote = null;
+if (string.IsNullOrWhiteSpace(explicitDataDir))
+{
+    var imported = DataLocations.TryImportLegacy(dataLocation.Path);
+    legacyImportNote = imported.Message;
+}
+
+var settingsStore = new SettingsStore(dataLocation.Path);
 var authStore = new AuthStore(settingsStore.DataDir);
 var sessions = new SessionStore();
 var throttle = new LoginThrottle();
@@ -460,8 +473,21 @@ app.Lifetime.ApplicationStarted.Register(() =>
     Console.WriteLine("  MCServerPanel 已启动");
     Console.WriteLine($"  本机访问：{url}");
     foreach (var extra in runtime.Urls.Skip(1)) Console.WriteLine($"  局域网访问：{extra}");
+    Console.WriteLine($"  数据目录：{settingsStore.DataDir}");
+    Console.WriteLine("            （settings.json / auth.json / logs 审计 / backups 都在这个目录里）");
     Console.WriteLine($"  设置文件：{settingsStore.FilePath}");
     Console.WriteLine($"  插件根：{(catalog.RootLocked ? catalog.LockedRoot : settingsStore.Current.ServerPath ?? "(未设置)")}");
+
+    if (dataLocation.Warning is { } dirWarning)
+    {
+        Console.WriteLine();
+        Console.WriteLine($"  ⚠ {dirWarning}");
+    }
+    if (!string.IsNullOrWhiteSpace(legacyImportNote))
+    {
+        Console.WriteLine();
+        Console.WriteLine($"  {legacyImportNote}");
+    }
 
     if (!authStore.IsConfigured && authStore.SetupToken is { } token)
     {

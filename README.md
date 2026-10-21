@@ -65,10 +65,31 @@ MCServerPanel.exe --plugins-root "D:\Servers\paper\plugins"
 ```bash
 --port 9000                 # 临时换端口（占用时自动顺延）
 --plugins-root <dir>        # 固定插件根目录（也可用环境变量 MCSP_PLUGINS_ROOT）
---data-dir <dir>            # 用另一份 settings.json / auth.json（便于并行调试）
+--data-dir <dir>            # 另指定数据目录（默认就在 exe 旁边，见下一节）
 --no-browser                # 不自动打开浏览器
 --reset-password            # 本机重置管理员密码（读 MCSP_NEW_PASSWORD 或交互输入）
 ```
+
+## 数据文件放在哪
+
+默认就在 **MCServerPanel.exe 所在目录**（源码运行时是 `bin/Debug/net10.0/`），不用去 `%LOCALAPPDATA%` 翻文件：
+
+```
+<程序目录>/
+├─ MCServerPanel.exe
+├─ settings.json      # 服务端目录、端口、是否允许局域网
+├─ auth.json          # 管理员账号（PBKDF2 加盐哈希，不是明文密码）
+├─ logs/              # 审计日志 audit-YYYYMM.jsonl
+└─ backups/           # 每次保存前的旧文件备份，按日期分目录，保留 30 天
+```
+
+- 想换位置就加 `--data-dir D:\MCSP-Data`；程序目录写不进去（例如装进 `C:\Program Files` 又没管理员权限）时，
+  会自动回退到 `%LOCALAPPDATA%\MCServerPanel` 并在控制台写明原因。
+- 整个程序目录可以直接拷走做备份或迁移，不需要找注册表、也不需要翻用户目录。
+- 从 1.0.0 及更早版本升级：旧数据在 `%LOCALAPPDATA%\MCServerPanel`，第一次启动会**复制**到程序目录并在控制台提示，
+  旧目录原样保留，确认没问题后自行删除。
+- 想恢复成「全新安装」的状态：停掉面板，删掉程序目录里的 `auth.json`、`settings.json`、`logs/`、`backups/`，
+  重新启动后控制台会打印新的一次性初始化令牌。
 
 ## 安全默认值（阶段 1 已实现）
 

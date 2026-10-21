@@ -184,6 +184,12 @@ def main() -> int:
               [l for l in new_text.split("\n") if l.strip().startswith("#")] ==
               [l for l in doc["text"].split("\n") if l.strip().startswith("#")])
 
+        # 备份必须落在数据目录里（曾经错写在 %LOCALAPPDATA%，换目录后要盯住）
+        bak_root = os.path.join(data_dir, "backups")
+        baks = [os.path.join(r, f) for r, _, fs in os.walk(bak_root) for f in fs if f.endswith(".bak")]
+        inside = all(os.path.commonpath([b, data_dir]) == os.path.normpath(data_dir) for b in baks)
+        check("备份写在数据目录内", len(baks) >= 1 and inside, f"count={len(baks)}")
+
         st, _, _ = http(port, "/api/browse", cookie=cookie)
         check("固定插件根后关闭目录浏览", st == 403, st)
         st, _, _ = http(port, "/api/settings", "POST",

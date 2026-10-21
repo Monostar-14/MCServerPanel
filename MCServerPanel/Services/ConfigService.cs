@@ -60,13 +60,12 @@ public static class TextFile
 
 public static class BackupStore
 {
-    public static string? Save(string sourcePath, byte[] bytes, string? pluginsRoot)
+    /// <summary>备份跟着数据目录走（默认就是程序目录），不再单独写用户目录。</summary>
+    public static string? Save(string sourcePath, byte[] bytes, string? pluginsRoot, string dataDir)
     {
         try
         {
-            var dir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "MCServerPanel", "backups", DateTime.Now.ToString("yyyyMMdd"));
+            var dir = Path.Combine(dataDir, "backups", DateTime.Now.ToString("yyyyMMdd"));
             Directory.CreateDirectory(dir);
 
             var rel = pluginsRoot is not null
@@ -201,7 +200,7 @@ public sealed class ConfigService
             if (applied.NewText is null) throw new PanelException("没有生成新的文件内容。", 500);
 
             var warnings = new List<string>();
-            var backup = BackupStore.Save(full, bytes, _catalog.CurrentLayout.PluginsPath);
+            var backup = BackupStore.Save(full, bytes, _catalog.CurrentLayout.PluginsPath, _catalog.DataDir);
             if (backup is null) warnings.Add("备份旧文件失败，但已写入新配置。");
 
             TextFile.WriteAtomic(full, applied.NewText, encoding, bomLength > 0);
